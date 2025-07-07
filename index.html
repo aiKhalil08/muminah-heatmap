@@ -110,42 +110,33 @@
         }
 
         .heat-map {
-            display: grid;
-            grid-template-columns: repeat(20, 1fr);
-            gap: 1px;
+            position: relative;
             margin-bottom: 16px;
             border: 1px solid #374151;
             border-radius: 4px;
-            padding: 4px;
+            overflow: hidden;
         }
 
-        .heat-cell {
-            width: 20px;
-            height: 20px;
-            position: relative;
-            cursor: pointer;
-            border-radius: 1px;
+        #heatMapCanvas {
+            display: block;
+            cursor: crosshair;
+            background: #111827;
         }
 
-        .heat-cell:hover .tooltip {
-            opacity: 1;
-        }
-
-        .tooltip {
+        .canvas-tooltip {
             position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
             background: #1f2937;
             color: white;
-            padding: 4px 8px;
+            padding: 6px 10px;
             border-radius: 4px;
             font-size: 0.75rem;
             white-space: nowrap;
             opacity: 0;
             transition: opacity 0.3s;
             z-index: 10;
-            margin-bottom: 4px;
+            pointer-events: none;
+            border: 1px solid #374151;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         }
 
         .legend {
@@ -240,19 +231,15 @@
         }
 
         @media (max-width: 768px) {
-            .heat-cell {
-                width: 15px;
-                height: 15px;
+            #heatMapCanvas {
+                width: 100%;
+                height: auto;
+                max-width: 400px;
             }
             
             .control-panel {
                 flex-direction: column;
                 gap: 8px;
-            }
-            
-            .heat-map {
-                grid-template-columns: repeat(20, 1fr);
-                gap: 0;
             }
         }
     </style>
@@ -275,7 +262,10 @@
         <div class="section">
             <h2>Spatial Temperature Distribution</h2>
             <div class="heat-map-container">
-                <div id="heatMap" class="heat-map"></div>
+                <div class="heat-map">
+                    <canvas id="heatMapCanvas" width="600" height="450"></canvas>
+                    <div id="canvasTooltip" class="canvas-tooltip"></div>
+                </div>
                 
                 <!-- Zone Labels -->
                 <div class="legend">
@@ -367,11 +357,19 @@
                 this.pauseBtn = document.getElementById('pauseBtn');
                 this.resetBtn = document.getElementById('resetBtn');
                 this.timeDisplay = document.getElementById('timeDisplay');
-                this.heatMapContainer = document.getElementById('heatMap');
+                this.canvas = document.getElementById('heatMapCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.tooltip = document.getElementById('canvasTooltip');
                 this.avgTempDisplay = document.getElementById('avgTemp');
                 this.maxTempDisplay = document.getElementById('maxTemp');
                 this.minTempDisplay = document.getElementById('minTemp');
                 this.tempRangeDisplay = document.getElementById('tempRange');
+                
+                // Canvas settings
+                this.canvasWidth = 600;
+                this.canvasHeight = 450;
+                this.cellWidth = this.canvasWidth / this.GRID_WIDTH;
+                this.cellHeight = this.canvasHeight / this.GRID_HEIGHT;
                 
                 this.init();
             }
@@ -379,7 +377,7 @@
             init() {
                 this.generateTemperatureData();
                 this.generateHeatMapData();
-                this.createHeatMapDOM();
+                this.setupCanvas();
                 this.updateDisplay();
                 this.bindEvents();
             }
@@ -476,23 +474,183 @@
                 this.heatMapData = heatMapData;
             }
             
-            createHeatMapDOM() {
-                this.heatMapContainer.innerHTML = '';
+            setupCanvas() {
+                // Set up canvas for high DPI displays
+                const dpr = window.devicePixelRatio || 1;
+                const rect = this.canvas.getBoundingClientRect();
                 
-                this.heatMapData.forEach((row, y) => {
-                    row.forEach((cell, x) => {
-                        const cellElement = document.createElement('div');
-                        cellElement.className = 'heat-cell';
-                        cellElement.dataset.x = x;
-                        cellElement.dataset.y = y;
-                        
-                        const tooltip = document.createElement('div');
-                        tooltip.className = 'tooltip';
-                        cellElement.appendChild(tooltip);
-                        
-                        this.heatMapContainer.appendChild(cellElement);
-                    });
+                this.canvas.width = this.canvasWidth * dpr;
+                this.canvas.height = this.canvasHeight * dpr;
+                this.canvas.style.width = this.canvasWidth + 'px';
+                this.canvas.style.height = this.canvasHeight + 'px';
+                
+                this.ctx.scale(dpr, dpr);
+                this.ctx.imageSmoothingEnabled = true;
+                this.ctx.imageSmoothingQuality = 'high';
+                
+                // Set up mouse tracking for tooltip
+                this.canvas.addEventListener('mousemove', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    const gridX = Math.floor(x / this.cellWidth);
+                    const gridY = Math.floor(y / this.cellHeight);
+                    
+                    if (gridX >= 0 && gridX < this.GRID_WIDTH && gridY >= 0 && gridY < this.GRID_HEIGHT) {
+                        const cell = this.heatMapData[gridY][gridX];
+                        this.tooltip.textContent = `${cell.currentTemp.toFixed(1)}°C (${gridX}, ${gridY})`;
+                        this.tooltip.style.left = (e.clientX + 10) + 'px';
+                        this.tooltip.style.top = (e.clientY - 30) + 'px';
+                        this.tooltip.style.opacity = '1';
+                    } else {
+                        this.tooltip.style.opacity = '0';
+                    }
                 });
+                
+                this.canvas.addEventListener('mouseleave', () => {
+                    this.tooltip.style.opacity = '0';
+                });
+            }
+            
+            createRadialGradient(centerX, centerY, radius, color1, color2) {
+                const gradient = this.ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+                gradient.addColorStop(0, color1);
+                gradient.addColorStop(1, color2);
+                return gradient;
+            }
+            
+            drawHeatMap() {
+                // Clear canvas
+                this.ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+                
+                // Create image data for pixel-level manipulation
+                const imageData = this.ctx.createImageData(this.canvasWidth, this.canvasHeight);
+                const data = imageData.data;
+                
+                // Fill each pixel based on interpolated temperature
+                for (let y = 0; y < this.canvasHeight; y++) {
+                    for (let x = 0; x < this.canvasWidth; x++) {
+                        const gridX = Math.floor(x / this.cellWidth);
+                        const gridY = Math.floor(y / this.cellHeight);
+                        
+                        // Bilinear interpolation for smooth gradients
+                        const temp = this.getInterpolatedTemperature(x / this.cellWidth, y / this.cellHeight);
+                        const color = this.getTemperatureColorRGB(temp);
+                        
+                        const index = (y * this.canvasWidth + x) * 4;
+                        data[index] = color.r;     // Red
+                        data[index + 1] = color.g; // Green
+                        data[index + 2] = color.b; // Blue
+                        data[index + 3] = 255;     // Alpha
+                    }
+                }
+                
+                this.ctx.putImageData(imageData, 0, 0);
+                
+                // Add subtle zone boundaries for reference
+                this.drawZoneBoundaries();
+            }
+            
+            getInterpolatedTemperature(x, y) {
+                const gridX = Math.floor(x);
+                const gridY = Math.floor(y);
+                
+                // Clamp to grid boundaries
+                const x1 = Math.max(0, Math.min(this.GRID_WIDTH - 1, gridX));
+                const y1 = Math.max(0, Math.min(this.GRID_HEIGHT - 1, gridY));
+                const x2 = Math.max(0, Math.min(this.GRID_WIDTH - 1, gridX + 1));
+                const y2 = Math.max(0, Math.min(this.GRID_HEIGHT - 1, gridY + 1));
+                
+                // Get temperatures at four corners
+                const temp11 = this.heatMapData[y1][x1].currentTemp;
+                const temp12 = this.heatMapData[y2][x1].currentTemp;
+                const temp21 = this.heatMapData[y1][x2].currentTemp;
+                const temp22 = this.heatMapData[y2][x2].currentTemp;
+                
+                // Bilinear interpolation
+                const fx = x - gridX;
+                const fy = y - gridY;
+                
+                const temp1 = temp11 * (1 - fx) + temp21 * fx;
+                const temp2 = temp12 * (1 - fx) + temp22 * fx;
+                
+                return temp1 * (1 - fy) + temp2 * fy;
+            }
+            
+            getTemperatureColorRGB(temp) {
+                const minTemp = this.AMBIENT_TEMP;
+                const maxTemp = this.CHARCOAL_TEMP;
+                const normalized = Math.max(0, Math.min(1, (temp - minTemp) / (maxTemp - minTemp)));
+                
+                if (normalized < 0.15) {
+                    const factor = normalized / 0.15;
+                    return {
+                        r: Math.floor(factor * 50),
+                        g: Math.floor(100 + factor * 155),
+                        b: 255
+                    };
+                } else if (normalized < 0.35) {
+                    const factor = (normalized - 0.15) / 0.2;
+                    return {
+                        r: Math.floor(50 - factor * 50),
+                        g: 255,
+                        b: Math.floor(255 - factor * 255)
+                    };
+                } else if (normalized < 0.55) {
+                    const factor = (normalized - 0.35) / 0.2;
+                    return {
+                        r: Math.floor(factor * 255),
+                        g: 255,
+                        b: 0
+                    };
+                } else if (normalized < 0.75) {
+                    const factor = (normalized - 0.55) / 0.2;
+                    return {
+                        r: 255,
+                        g: Math.floor(255 - factor * 100),
+                        b: 0
+                    };
+                } else if (normalized < 0.9) {
+                    const factor = (normalized - 0.75) / 0.15;
+                    return {
+                        r: 255,
+                        g: Math.floor(155 - factor * 100),
+                        b: Math.floor(factor * 50)
+                    };
+                } else {
+                    const factor = (normalized - 0.9) / 0.1;
+                    return {
+                        r: 255,
+                        g: Math.floor(55 - factor * 55),
+                        b: Math.floor(50 - factor * 50)
+                    };
+                }
+            }
+            
+            drawZoneBoundaries() {
+                this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+                this.ctx.lineWidth = 1;
+                this.ctx.setLineDash([2, 2]);
+                
+                // Draw subtle grid lines
+                for (let i = 0; i <= this.GRID_WIDTH; i++) {
+                    const x = i * this.cellWidth;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x, 0);
+                    this.ctx.lineTo(x, this.canvasHeight);
+                    this.ctx.stroke();
+                }
+                
+                for (let i = 0; i <= this.GRID_HEIGHT; i++) {
+                    const y = i * this.cellHeight;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, y);
+                    this.ctx.lineTo(this.canvasWidth, y);
+                    this.ctx.stroke();
+                }
+                
+                this.ctx.setLineDash([]);
             }
             
             updateHeatMap() {
@@ -574,18 +732,7 @@
             
             updateDisplay() {
                 this.updateHeatMap();
-                
-                const cells = this.heatMapContainer.querySelectorAll('.heat-cell');
-                cells.forEach((cellElement, index) => {
-                    const y = Math.floor(index / this.GRID_WIDTH);
-                    const x = index % this.GRID_WIDTH;
-                    const cell = this.heatMapData[y][x];
-                    
-                    cellElement.style.backgroundColor = this.getTemperatureColor(cell.currentTemp);
-                    
-                    const tooltip = cellElement.querySelector('.tooltip');
-                    tooltip.textContent = `${cell.currentTemp.toFixed(1)}°C`;
-                });
+                this.drawHeatMap();
                 
                 // Update statistics
                 const allTemps = this.heatMapData.flat().map(cell => cell.currentTemp);
