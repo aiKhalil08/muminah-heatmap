@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Charcoal Temperature Heat Map</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #111827;
+            color: white;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        .control-panel {
+            background: #1f2937;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .btn-start {
+            background: #dc2626;
+            color: white;
+        }
+
+        .btn-start:hover:not(:disabled) {
+            background: #b91c1c;
+        }
+
+        .btn-pause {
+            background: #d97706;
+            color: white;
+        }
+
+        .btn-pause:hover:not(:disabled) {
+            background: #b45309;
+        }
+
+        .btn-reset {
+            background: #4b5563;
+            color: white;
+        }
+
+        .btn-reset:hover {
+            background: #374151;
+        }
+
+        .btn:disabled {
+            background: #4b5563;
+            cursor: not-allowed;
+        }
+
+        .time-display {
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: #f87171;
+        }
+
+        .section {
+            background: #1f2937;
+            padding: 24px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+
+        .section h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .heat-map-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .heat-map {
+            display: grid;
+            grid-template-columns: repeat(20, 1fr);
+            gap: 1px;
+            margin-bottom: 16px;
+            border: 1px solid #374151;
+            border-radius: 4px;
+            padding: 4px;
+        }
+
+        .heat-cell {
+            width: 20px;
+            height: 20px;
+            position: relative;
+            cursor: pointer;
+            border-radius: 1px;
+        }
+
+        .heat-cell:hover .tooltip {
+            opacity: 1;
+        }
+
+        .tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f2937;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 10;
+            margin-bottom: 4px;
+        }
+
+        .legend {
+            text-align: center;
+            font-size: 0.875rem;
+            color: #9ca3af;
+            margin-bottom: 16px;
+        }
+
+        .legend-item {
+            display: inline-block;
+            margin: 0 8px;
+        }
+
+        .legend-color {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        .temperature-scale {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 12px;
+        }
+
+        .temperature-gradient {
+            flex: 1;
+            height: 32px;
+            margin: 0 16px;
+            border-radius: 4px;
+            background: linear-gradient(to right, 
+                rgb(100, 150, 255), 
+                rgb(0, 255, 255), 
+                rgb(0, 255, 0), 
+                rgb(255, 255, 0), 
+                rgb(255, 155, 0), 
+                rgb(255, 0, 0)
+            );
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .stat-card {
+            background: #374151;
+            padding: 16px;
+            border-radius: 8px;
+        }
+
+        .stat-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .analysis {
+            margin-top: 24px;
+            padding: 16px;
+            background: #374151;
+            border-radius: 8px;
+        }
+
+        .analysis h3 {
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .analysis ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .analysis li {
+            margin-bottom: 8px;
+            font-size: 0.875rem;
+        }
+
+        .analysis li:before {
+            content: "• ";
+            color: #60a5fa;
+        }
+
+        @media (max-width: 768px) {
+            .heat-cell {
+                width: 15px;
+                height: 15px;
+            }
+            
+            .control-panel {
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            .heat-map {
+                grid-template-columns: repeat(20, 1fr);
+                gap: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Charcoal Temperature Heat Map</h1>
+        
+        <!-- Control Panel -->
+        <div class="control-panel">
+            <button id="startBtn" class="btn btn-start">Start Simulation</button>
+            <button id="pauseBtn" class="btn btn-pause" disabled>Pause</button>
+            <button id="resetBtn" class="btn btn-reset">Reset</button>
+            <div class="time-display">
+                Time: <span id="timeDisplay">0</span>s / <span id="maxTime">300</span>s
+            </div>
+        </div>
+        
+        <!-- Heat Map -->
+        <div class="section">
+            <h2>Spatial Temperature Distribution</h2>
+            <div class="heat-map-container">
+                <div id="heatMap" class="heat-map"></div>
+                
+                <!-- Zone Labels -->
+                <div class="legend">
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #dc2626;"></span>Charcoal Bed (Bottom)
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #f97316;"></span>Roasting Bed (Middle)
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #6b7280;"></span>Ash Tray (Top)
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Temperature Scale -->
+        <div class="section">
+            <h2>Temperature Scale</h2>
+            <div class="temperature-scale">
+                <span>25°C</span>
+                <div class="temperature-gradient"></div>
+                <span>500°C</span>
+            </div>
+        </div>
+        
+        <!-- Statistics -->
+        <div class="section">
+            <h2>Current Statistics</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-title" style="color: #60a5fa;">Average Temperature</div>
+                    <div class="stat-value" id="avgTemp">25.0°C</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-title" style="color: #f87171;">Maximum Temperature</div>
+                    <div class="stat-value" id="maxTemp">25.0°C</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-title" style="color: #22d3ee;">Minimum Temperature</div>
+                    <div class="stat-value" id="minTemp">25.0°C</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-title" style="color: #fbbf24;">Temperature Range</div>
+                    <div class="stat-value" id="tempRange">0.0°C</div>
+                </div>
+            </div>
+            
+            <div class="analysis">
+                <h3>Heat Map Analysis:</h3>
+                <ul>
+                    <li>Visual representation of temperature distribution across the cooking apparatus</li>
+                    <li>Red zones indicate highest temperatures (charcoal bed area)</li>
+                    <li>Orange zones show roasting bed temperatures</li>
+                    <li>Blue-green zones represent cooler areas and ambient temperatures</li>
+                    <li>Heat gradient shows natural temperature decay with distance from heat source</li>
+                    <li>Hover over cells to see exact temperature values</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class CharcoalHeatMap {
+            constructor() {
+                // Temperature constants
+                this.CHARCOAL_TEMP = 500;
+                this.AMBIENT_TEMP = 25;
+                this.MAX_ASH_TEMP = 80;
+                this.MIN_ROAST_TEMP = 150;
+                this.SIMULATION_DURATION = 300;
+                
+                // Heat map dimensions
+                this.GRID_WIDTH = 20;
+                this.GRID_HEIGHT = 15;
+                
+                // State
+                this.isRunning = false;
+                this.simulationTime = 0;
+                this.data = [];
+                this.heatMapData = [];
+                this.intervalId = null;
+                
+                // DOM elements
+                this.startBtn = document.getElementById('startBtn');
+                this.pauseBtn = document.getElementById('pauseBtn');
+                this.resetBtn = document.getElementById('resetBtn');
+                this.timeDisplay = document.getElementById('timeDisplay');
+                this.heatMapContainer = document.getElementById('heatMap');
+                this.avgTempDisplay = document.getElementById('avgTemp');
+                this.maxTempDisplay = document.getElementById('maxTemp');
+                this.minTempDisplay = document.getElementById('minTemp');
+                this.tempRangeDisplay = document.getElementById('tempRange');
+                
+                this.init();
+            }
+            
+            init() {
+                this.generateTemperatureData();
+                this.generateHeatMapData();
+                this.createHeatMapDOM();
+                this.updateDisplay();
+                this.bindEvents();
+            }
+            
+            generateTemperatureData() {
+                const dataPoints = [];
+                let currentRoastTemp = this.AMBIENT_TEMP;
+                let currentAshTemp = this.AMBIENT_TEMP;
+                
+                const targetEfficiency = 0.40;
+                const roastTargetTemp = this.AMBIENT_TEMP + targetEfficiency * (this.CHARCOAL_TEMP - this.AMBIENT_TEMP);
+                
+                for (let time = 0; time <= this.SIMULATION_DURATION; time += 5) {
+                    const roastHeatRate = (roastTargetTemp - currentRoastTemp) * 0.0135;
+                    currentRoastTemp = Math.min(currentRoastTemp + roastHeatRate, roastTargetTemp);
+                    
+                    const ashTargetTemp = Math.min(this.MAX_ASH_TEMP, this.CHARCOAL_TEMP * 0.15);
+                    const ashHeatRate = (ashTargetTemp - currentAshTemp) * 0.008;
+                    currentAshTemp = Math.min(currentAshTemp + ashHeatRate, ashTargetTemp);
+                    
+                    dataPoints.push({
+                        time: time,
+                        roastingBed: Math.round(currentRoastTemp * 10) / 10,
+                        charcoalBed: this.CHARCOAL_TEMP,
+                        ashTray: Math.round(currentAshTemp * 10) / 10,
+                    });
+                }
+                
+                this.data = dataPoints;
+            }
+            
+            generateHeatMapData() {
+                const heatMapData = [];
+                const targetEfficiency = 0.40;
+                
+                const charcoalCenterX = 10;
+                const charcoalCenterY = 12;
+                const roastingCenterX = 10;
+                const roastingCenterY = 6;
+                
+                for (let y = 0; y < this.GRID_HEIGHT; y++) {
+                    const row = [];
+                    for (let x = 0; x < this.GRID_WIDTH; x++) {
+                        const distanceFromCharcoal = Math.sqrt(Math.pow(x - charcoalCenterX, 2) + Math.pow(y - charcoalCenterY, 2));
+                        const distanceFromRoasting = Math.sqrt(Math.pow(x - roastingCenterX, 2) + Math.pow(y - roastingCenterY, 2));
+                        
+                        let zone = 'ambient';
+                        let baseTemp = this.AMBIENT_TEMP;
+                        
+                        const charcoalRadiusX = 2.5;
+                        const charcoalRadiusY = 1.5;
+                        const charcoalEllipse = Math.pow((x - charcoalCenterX) / charcoalRadiusX, 2) + Math.pow((y - charcoalCenterY) / charcoalRadiusY, 2);
+                        
+                        if (charcoalEllipse <= 1) {
+                            zone = 'charcoal';
+                            baseTemp = this.CHARCOAL_TEMP;
+                        } else {
+                            const roastingRadiusX = 4;
+                            const roastingRadiusY = 2;
+                            const roastingEllipse = Math.pow((x - roastingCenterX) / roastingRadiusX, 2) + Math.pow((y - roastingCenterY) / roastingRadiusY, 2);
+                            
+                            if (roastingEllipse <= 1) {
+                                zone = 'roasting';
+                                const roastingTarget = this.AMBIENT_TEMP + (targetEfficiency * (this.CHARCOAL_TEMP - this.AMBIENT_TEMP));
+                                baseTemp = roastingTarget;
+                            } else {
+                                const charcoalInfluence = Math.max(0, 1 - (distanceFromCharcoal / 8));
+                                const roastingInfluence = Math.max(0, 1 - (distanceFromRoasting / 6));
+                                const totalInfluence = charcoalInfluence * 0.7 + roastingInfluence * 0.3;
+                                const verticalEffect = Math.max(0, 1 - (Math.abs(y - charcoalCenterY) / 8));
+                                const maxTempReduction = this.CHARCOAL_TEMP * 0.8;
+                                baseTemp = this.AMBIENT_TEMP + (maxTempReduction * totalInfluence * verticalEffect);
+                                
+                                if (y <= 2 && x >= 8 && x <= 12) {
+                                    zone = 'ash';
+                                    baseTemp = Math.min(baseTemp, this.MAX_ASH_TEMP);
+                                } else {
+                                    zone = 'gradient';
+                                }
+                            }
+                        }
+                        
+                        row.push({
+                            x,
+                            y,
+                            zone,
+                            baseTemp: Math.max(this.AMBIENT_TEMP, baseTemp),
+                            currentTemp: Math.max(this.AMBIENT_TEMP, baseTemp)
+                        });
+                    }
+                    heatMapData.push(row);
+                }
+                
+                this.heatMapData = heatMapData;
+            }
+            
+            createHeatMapDOM() {
+                this.heatMapContainer.innerHTML = '';
+                
+                this.heatMapData.forEach((row, y) => {
+                    row.forEach((cell, x) => {
+                        const cellElement = document.createElement('div');
+                        cellElement.className = 'heat-cell';
+                        cellElement.dataset.x = x;
+                        cellElement.dataset.y = y;
+                        
+                        const tooltip = document.createElement('div');
+                        tooltip.className = 'tooltip';
+                        cellElement.appendChild(tooltip);
+                        
+                        this.heatMapContainer.appendChild(cellElement);
+                    });
+                });
+            }
+            
+            updateHeatMap() {
+                if (this.data.length === 0) return;
+                
+                const currentDataPoint = this.data[Math.floor(this.simulationTime / 5)] || this.data[0];
+                const progress = this.simulationTime / this.SIMULATION_DURATION;
+                
+                this.heatMapData.forEach((row, y) => {
+                    row.forEach((cell, x) => {
+                        let newTemp = cell.baseTemp;
+                        
+                        switch (cell.zone) {
+                            case 'roasting':
+                                newTemp = this.AMBIENT_TEMP + (currentDataPoint.roastingBed - this.AMBIENT_TEMP) * (1 - Math.exp(-progress * 3));
+                                break;
+                            case 'ash':
+                                newTemp = this.AMBIENT_TEMP + (currentDataPoint.ashTray - this.AMBIENT_TEMP) * (1 - Math.exp(-progress * 2));
+                                break;
+                            case 'charcoal':
+                                newTemp = this.CHARCOAL_TEMP;
+                                break;
+                            case 'gradient':
+                                const heatFactor = Math.max(0, 1 - progress * 0.3);
+                                newTemp = cell.baseTemp * (0.3 + 0.7 * heatFactor);
+                                break;
+                            default:
+                                newTemp = this.AMBIENT_TEMP + (cell.baseTemp - this.AMBIENT_TEMP) * (1 - Math.exp(-progress * 1.5));
+                        }
+                        
+                        cell.currentTemp = newTemp;
+                    });
+                });
+            }
+            
+            getTemperatureColor(temp) {
+                const minTemp = this.AMBIENT_TEMP;
+                const maxTemp = this.CHARCOAL_TEMP;
+                const normalized = Math.max(0, Math.min(1, (temp - minTemp) / (maxTemp - minTemp)));
+                
+                if (normalized < 0.15) {
+                    const factor = normalized / 0.15;
+                    const r = Math.floor(factor * 50);
+                    const g = Math.floor(100 + factor * 155);
+                    const b = 255;
+                    return `rgb(${r}, ${g}, ${b})`;
+                } else if (normalized < 0.35) {
+                    const factor = (normalized - 0.15) / 0.2;
+                    const r = Math.floor(50 - factor * 50);
+                    const g = 255;
+                    const b = Math.floor(255 - factor * 255);
+                    return `rgb(${r}, ${g}, ${b})`;
+                } else if (normalized < 0.55) {
+                    const factor = (normalized - 0.35) / 0.2;
+                    const r = Math.floor(factor * 255);
+                    const g = 255;
+                    const b = 0;
+                    return `rgb(${r}, ${g}, ${b})`;
+                } else if (normalized < 0.75) {
+                    const factor = (normalized - 0.55) / 0.2;
+                    const r = 255;
+                    const g = Math.floor(255 - factor * 100);
+                    const b = 0;
+                    return `rgb(${r}, ${g}, ${b})`;
+                } else if (normalized < 0.9) {
+                    const factor = (normalized - 0.75) / 0.15;
+                    const r = 255;
+                    const g = Math.floor(155 - factor * 100);
+                    const b = Math.floor(factor * 50);
+                    return `rgb(${r}, ${g}, ${b})`;
+                } else {
+                    const factor = (normalized - 0.9) / 0.1;
+                    const r = 255;
+                    const g = Math.floor(55 - factor * 55);
+                    const b = Math.floor(50 - factor * 50);
+                    return `rgb(${r}, ${g}, ${b})`;
+                }
+            }
+            
+            updateDisplay() {
+                this.updateHeatMap();
+                
+                const cells = this.heatMapContainer.querySelectorAll('.heat-cell');
+                cells.forEach((cellElement, index) => {
+                    const y = Math.floor(index / this.GRID_WIDTH);
+                    const x = index % this.GRID_WIDTH;
+                    const cell = this.heatMapData[y][x];
+                    
+                    cellElement.style.backgroundColor = this.getTemperatureColor(cell.currentTemp);
+                    
+                    const tooltip = cellElement.querySelector('.tooltip');
+                    tooltip.textContent = `${cell.currentTemp.toFixed(1)}°C`;
+                });
+                
+                // Update statistics
+                const allTemps = this.heatMapData.flat().map(cell => cell.currentTemp);
+                const avgTemp = allTemps.reduce((a, b) => a + b, 0) / allTemps.length;
+                const maxTemp = Math.max(...allTemps);
+                const minTemp = Math.min(...allTemps);
+                
+                this.avgTempDisplay.textContent = `${avgTemp.toFixed(1)}°C`;
+                this.maxTempDisplay.textContent = `${maxTemp.toFixed(1)}°C`;
+                this.minTempDisplay.textContent = `${minTemp.toFixed(1)}°C`;
+                this.tempRangeDisplay.textContent = `${(maxTemp - minTemp).toFixed(1)}°C`;
+                
+                this.timeDisplay.textContent = this.simulationTime;
+            }
+            
+            startSimulation() {
+                if (this.isRunning) return;
+                
+                this.isRunning = true;
+                this.startBtn.disabled = true;
+                this.pauseBtn.disabled = false;
+                
+                this.intervalId = setInterval(() => {
+                    this.simulationTime++;
+                    this.updateDisplay();
+                    
+                    if (this.simulationTime >= this.SIMULATION_DURATION) {
+                        this.pauseSimulation();
+                    }
+                }, 100);
+            }
+            
+            pauseSimulation() {
+                this.isRunning = false;
+                this.startBtn.disabled = false;
+                this.pauseBtn.disabled = true;
+                
+                if (this.intervalId) {
+                    clearInterval(this.intervalId);
+                    this.intervalId = null;
+                }
+            }
+            
+            resetSimulation() {
+                this.pauseSimulation();
+                this.simulationTime = 0;
+                this.updateDisplay();
+            }
+            
+            bindEvents() {
+                this.startBtn.addEventListener('click', () => this.startSimulation());
+                this.pauseBtn.addEventListener('click', () => this.pauseSimulation());
+                this.resetBtn.addEventListener('click', () => this.resetSimulation());
+            }
+        }
+        
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            new CharcoalHeatMap();
+        });
+    </script>
+</body>
+</html>
